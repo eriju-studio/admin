@@ -1,129 +1,291 @@
-            常量 {數據} = 等待 _supabase。從（'產品'）。選擇（'*'）。命令（'ID'， { 上升：錯誤的 }）；
-            如果 （！數據） 返回；
-            文件。getElementById（'產品清單'）。內部 HTML = 數據。地圖（p => `
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EriJu | 職人管理後台 (Google 安全登入)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { background-color: #f5f5f7; font-family: -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+        body.locked { overflow: hidden; height: 100vh; }
+        .glass-nav { background: rgba(255,255,255,0.8); backdrop-filter: saturate(180%) blur(20px); border-bottom: 0.5px solid rgba(0,0,0,0.1); }
+        .card { background: white; border-radius: 28px; border: 1px solid rgba(0,0,0,0.05); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .tab-btn { padding: 8px 18px; border-radius: 12px; font-weight: bold; font-size: 13px; transition: 0.2s; position: relative; }
+        .tab-btn.active { background: #0071e3; color: white; box-shadow: 0 4px 10px rgba(0,113,227,0.3); }
+        .tab-btn.inactive { color: #86868b; }
+        .badge-dot { position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; background-color: #ff3b30; border: 2px solid white; border-radius: 50%; display: none; }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
+        .modal.active { display: flex; }
+        input, textarea, select { background: #fbfbfd; border: 1px solid #d2d2d7; border-radius: 12px; padding: 12px; width: 100%; outline: none; }
+        .status-badge { padding: 4px 12px; border-radius: 100px; font-size: 10px; font-weight: 800; }
+        #admin-lock { transition: all 0.6s ease; }
+        #admin-lock.unlocked { opacity: 0; pointer-events: none; transform: translateY(-20px); }
+        .border-pending { border-left: 8px solid #ff9500; }
+        .border-processing { border-left: 8px solid #0071e3; }
+        .border-delivered { border-left: 8px solid #34c759; }
+        .border-completed { border-left: 8px solid #d2d2d7; opacity: 0.8; }
+    </style>
+</head>
+<body class="pb-20 locked">
+
+    <div id="admin-lock" class="fixed inset-0 z-[1000] flex items-center justify-center backdrop-blur-[40px] bg-white/50">
+        <div class="card p-10 w-full max-w-sm text-center shadow-2xl border bg-white/90">
+            <div class="w-20 h-20 bg-black rounded-3xl mx-auto mb-6 flex items-center justify-center text-white text-3xl font-bold italic">E</div>
+            <h2 class="text-2xl font-black mb-1">工作室管理系統</h2>
+            <p class="text-gray-500 text-sm mb-10">請使用管理員 Google 帳號驗證</p>
+            
+            <button onclick="handleGoogleLogin()" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 py-4 rounded-2xl font-bold hover:bg-gray-50 transition active:scale-95 shadow-sm text-gray-700">
+                <img src="https://www.google.com/favicon.ico" class="w-5 h-5">
+                使用 Google 帳號登入
+            </button>
+            
+            <p id="auth-error" class="text-red-500 text-xs font-bold mt-6 opacity-0 transition-opacity italic text-center">此帳號無管理權限，即將登出</p>
+        </div>
+    </div>
+
+    <nav class="glass-nav fixed top-0 w-full z-50 h-[64px] flex items-center px-6">
+        <div class="max-w-6xl mx-auto w-full flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-white font-bold text-xs">E</div>
+                <span class="font-black text-lg">Control <span class="text-blue-600">Center</span></span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex gap-1 bg-gray-100 p-1 rounded-[14px]">
+                    <button onclick="switchMainTab('products')" id="main-tab-products" class="tab-btn active">作品庫</button>
+                    <button onclick="switchMainTab('orders')" id="main-tab-orders" class="tab-btn inactive">訂單流水線</button>
+                </div>
+                <button onclick="handleLogout()" class="text-xs font-bold text-gray-400 hover:text-red-500 transition">安全登出</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto pt-28 px-6">
+        <section id="section-products">
+            <div class="flex justify-between items-end mb-8">
+                <div><h2 class="text-3xl font-extrabold tracking-tight">目前作品庫</h2><p class="text-gray-500 text-sm mt-1">管理前台展示的產品資訊</p></div>
+                <button onclick="openAddModal()" class="bg-black text-white px-7 py-3 rounded-full font-bold shadow-xl text-sm">+ 新增作品</button>
+            </div>
+            <div id="product-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </section>
+
+        <section id="section-orders" class="hidden">
+            <div class="mb-8">
+                <h2 class="text-3xl font-extrabold tracking-tight mb-6">訂單流水線</h2>
+                <div class="flex space-x-2 bg-white p-1.5 rounded-2xl w-fit shadow-sm border border-gray-100">
+                    <button onclick="switchOrderSubTab('pending')" id="order-tab-pending" class="tab-btn active text-xs">待處理 <span id="dot-pending" class="badge-dot"></span></button>
+                    <button onclick="switchOrderSubTab('processing')" id="order-tab-processing" class="tab-btn inactive text-xs">製作中 <span id="dot-processing" class="badge-dot"></span></button>
+                    <button onclick="switchOrderSubTab('delivered')" id="order-tab-delivered" class="tab-btn inactive text-xs">已寄出 <span id="dot-delivered" class="badge-dot"></span></button>
+                    <button onclick="switchOrderSubTab('completed')" id="order-tab-completed" class="tab-btn inactive text-xs">已完成 <span id="dot-completed" class="badge-dot"></span></button>
+                </div>
+            </div>
+            <div id="order-list" class="space-y-6"></div>
+        </section>
+    </main>
+
+    <div id="edit-modal" class="modal">
+        <div class="bg-white rounded-[40px] p-10 max-w-4xl w-full max-h-[85vh] overflow-y-auto shadow-2xl mx-4 relative">
+            <div class="flex justify-between items-center mb-10">
+                <h2 id="modal-title" class="text-3xl font-black">編輯作品詳情</h2>
+                <button onclick="closeModal()" class="w-10 h-10 bg-gray-100 rounded-full text-gray-400">×</button>
+            </div>
+            <form id="edit-form" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <input type="hidden" id="edit-id">
+                <div class="space-y-4">
+                    <input type="text" id="edit-name" placeholder="作品名稱" required>
+                    <input type="number" id="edit-price" placeholder="價格 (NT$)" required>
+                    <select id="edit-status">
+                        <option value="true">✅ 供應中</option>
+                        <option value="false">❌ 缺貨中</option>
+                    </select>
+                    <textarea id="edit-desc" rows="4" placeholder="創作初衷..."></textarea>
+                </div>
+                <div class="space-y-4">
+                    <input type="text" id="edit-img1" placeholder="主圖網址 URL" required>
+                    <input type="text" id="edit-detail-title" placeholder="工法特色標題">
+                    <textarea id="edit-detail" rows="4" placeholder="詳細工法說明..."></textarea>
+                </div>
+                <div class="md:col-span-2 flex justify-between pt-8 border-t mt-4">
+                    <button type="button" id="delete-btn" onclick="deleteProduct()" class="text-red-500 font-bold hover:bg-red-50 px-4 py-2 rounded-xl">刪除作品</button>
+                    <div class="flex gap-4">
+                        <button type="button" onclick="closeModal()" class="px-8 text-gray-400 font-bold">取消</button>
+                        <button type="submit" class="bg-[#0071e3] text-white px-12 py-3 rounded-full font-bold shadow-lg">儲存並發佈</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- 初始化設定 ---
+        const _supabase = supabase.createClient('https://oikubhlwdbxrfhifqusn.supabase.co', 'sb_publishable_jwPs6RwbH4W4qg1ttjjZog_BcTN8VJy');
+        const ADMIN_EMAIL = "eriju.studio@gmail.com";
+        let currentOrderTab = 'pending';
+
+        // --- Google 登入邏輯 ---
+        async function handleGoogleLogin() {
+            const { error } = await _supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: { redirectTo: window.location.origin + window.location.pathname }
+            });
+            if (error) alert("登入請求失敗: " + error.message);
+        }
+
+        async function handleLogout() {
+            await _supabase.auth.signOut();
+            location.reload();
+        }
+
+        function unlockDashboard() {
+            document.getElementById('admin-lock').classList.add('unlocked');
+            document.body.classList.remove('locked');
+            initDashboard();
+        }
+
+        // 偵測登入狀態
+        window.onload = async () => {
+            const { data: { session } } = await _supabase.auth.getSession();
+            if (session) {
+                if (session.user.email === ADMIN_EMAIL) {
+                    unlockDashboard();
+                } else {
+                    document.getElementById('auth-error').style.opacity = '1';
+                    setTimeout(async () => { await _supabase.auth.signOut(); location.reload(); }, 2000);
+                }
+            }
+        };
+
+        // --- 資料處理邏輯 ---
+        function initDashboard() { fetchProducts(); fetchOrders(); refreshBadges(); }
+
+        async function fetchProducts() {
+            const { data } = await _supabase.from('products').select('*').order('id', { ascending: false });
+            if (!data) return;
+            document.getElementById('product-list').innerHTML = data.map(p => `
                 <div class="card p-5 flex items-center justify-between">
                     <div class="flex items-center space-x-5">
-                        <img src="${p。圖片網址}class="w-16 h-16 object-cover rounded-xl bg-gray-50 border">
+                        <img src="${p.image_url}" class="w-16 h-16 object-cover rounded-xl bg-gray-50 border">
                         <div>
-                            <span class="status-badge${p。地位？'bg-green-100 text-green-600'：'bg-red-100 text-red-500'}">${p。地位？'供應中'：'缺貨'}</span>
-                            <h3 class="font-bold text-gray-900 mt-1">${p。姓名}</h3>
-                            <p class="text-xs text-blue-600 font-bold">NT$${p。價格。（）}</p>
+                            <span class="status-badge ${p.status ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-500'}">${p.status?'供應中':'缺貨'}</span>
+                            <h3 class="font-bold text-gray-900 mt-1">${p.name}</h3>
+                            <p class="text-xs text-blue-600 font-bold">NT$ ${p.price.toLocaleString()}</p>
                         </div>
                     </div>
-                    <button onclick='openEditModal(${JSON。stringify（p）})' class="bg-gray-100 px-5 py-2 rounded-xl text-xs font-bold hover:bg-gray-200">管理</button>
-                </div>`）。加入（''）；
+                    <button onclick='openEditModal(${JSON.stringify(p)})' class="bg-gray-100 px-5 py-2 rounded-xl text-xs font-bold hover:bg-gray-200">管理</button>
+                </div>`).join('');
         }
 
-        非同步 功能 fetchOrders（） {
-            常量 清單 = 文件。getElementById（'訂單列表'）；
-            常量 { 數據：訂單 } = 等待 _supabase。從（“命令”）。選擇（'*'）。方程式（'地位'， 目前訂單標籤）。命令（'created_at'， { 上升：錯誤的 }）；
-            如果 （！訂單 || 訂單。長度 === 0） {
-                清單。內部 HTML = `<div class="text-center py-24 bg-white rounded-[32px] border border-dashed text-gray-400">目前沒有訂單</div>`；
-                返回；
+        async function fetchOrders() {
+            const list = document.getElementById('order-list');
+            const { data: orders } = await _supabase.from('orders').select('*').eq('status', currentOrderTab).order('created_at', { ascending: false });
+            if (!orders || orders.length === 0) {
+                list.innerHTML = `<div class="text-center py-24 bg-white rounded-[32px] border border-dashed text-gray-400">目前沒有訂單</div>`;
+                return;
             }
-            清單。內部 HTML = 訂單。地圖（命令 => `
-                <div class="card p-8 邊框-${命令。地位}">
+            list.innerHTML = orders.map(order => `
+                <div class="card p-8 border-${order.status}">
                     <div class="flex justify-between items-start mb-6">
-                        <div><h3 class="text-2xl font-black">${命令。使用者名稱}</h3><p class="text-blue-600 font-bold text-lg">${命令。用戶電話}</p></div>
+                        <div><h3 class="text-2xl font-black">${order.user_name}</h3><p class="text-blue-600 font-bold text-lg">${order.user_phone}</p></div>
                         <div class="text-right">
-                            <p class="text-[10px] text-gray-400 font-mono mb-1">${新的 日期（命令。創建於）。（）}</p>
-                            <p class="text-3xl font-black">NT$${命令。總金額。（）}</p>
+                            <p class="text-[10px] text-gray-400 font-mono mb-1">${new Date(order.created_at).toLocaleString()}</p>
+                            <p class="text-3xl font-black">NT$ ${order.total_amount.toLocaleString()}</p>
                         </div>
                     </div>
-                    <div class="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 mb-6 text-gray-700 font-medium">${命令。收件地址}</div>
+                    <div class="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 mb-6 text-gray-700 font-medium">${order.shipping_address}</div>
                     <div class="bg-gray-50 rounded-2xl p-5 mb-8 space-y-2 text-sm text-gray-600">
-                        ${命令。專案。地圖（我 => `<div class="flex justify-between"><span>${我。姓名}x${我。數量}</span><span class="font-bold text-gray-900">新台幣$${（我。價格 * 我。數量）。（）}</span></div>`）。加入（''）}
+                        ${order.items.map(i => `<div class="flex justify-between"><span>${i.name} x${i.qty}</span><span class="font-bold text-gray-900">NT$ ${(i.price * i.qty).toLocaleString()}</span></div>`).join('')}
                     </div>
-                    <div class="flex justify-end gap-3">${渲染訂單按鈕（命令）}</div>
-                </div>`）。加入（''）；
+                    <div class="flex justify-end gap-3">${renderOrderButtons(order)}</div>
+                </div>`).join('');
         }
 
-        功能 渲染訂單按鈕（命令） {
-            如果 （命令。地位 === '待辦的'） 返回 `<button onclick="updateOrderStatus('${命令。ID}', 'processing')" class="bg-blue-600 text-white px-8 py-3 rounded-full text-xs font-bold shadow-lg">開始製作</button>`；
-            如果 （命令。地位 === '加工'） 返回 `<button onclick="updateOrderStatus('${命令。ID}', '已交付')" class="bg-green-600 text-white px-8 py-3 rounded-full text-xs font-bold shadow-lg">完成發貨</button>`；
-            如果 （命令。地位 === '發表'） 返回 `<button onclick="updateOrderStatus('${命令。ID}', 'completed')" class="bg-gray-800 text-white px-8 py-3 rounded-full text-xs font-bold">手動結案</button>`；
-            返回 `<span class="text-xs text-gray-400 font-bold bg-gray-200 px-6 py-3 rounded-full">✅ 交易已完成</span>`；
+        function renderOrderButtons(order) {
+            if (order.status === 'pending') return `<button onclick="updateOrderStatus('${order.id}', 'processing')" class="bg-blue-600 text-white px-8 py-3 rounded-full text-xs font-bold shadow-lg">開始製作</button>`;
+            if (order.status === 'processing') return `<button onclick="updateOrderStatus('${order.id}', 'delivered')" class="bg-green-600 text-white px-8 py-3 rounded-full text-xs font-bold shadow-lg">完成出貨</button>`;
+            if (order.status === 'delivered') return `<button onclick="updateOrderStatus('${order.id}', 'completed')" class="bg-gray-800 text-white px-8 py-3 rounded-full text-xs font-bold">手動結案</button>`;
+            return `<span class="text-xs text-gray-400 font-bold bg-gray-200 px-6 py-3 rounded-full">✅ 交易已完成</span>`;
         }
 
-        非同步 功能 更新訂單狀態（ID， 新狀態） {
-            常量 {錯誤} = 等待 _supabase。從（“命令”）。更新（{ 地位：新狀態 }）。方程式（'ID'， ID）；
-            如果 （！錯誤） { fetchOrders（）； 刷新徽章（）； }
+        async function updateOrderStatus(id, newStatus) {
+            const { error } = await _supabase.from('orders').update({ status: newStatus }).eq('id', id);
+            if (!error) { fetchOrders(); refreshBadges(); }
         }
 
-        非同步 功能 刷新徽章（） {
-            常量 {數據} = 等待 _supabase。從（“命令”）。選擇（'地位'）；
-            如果（！數據） 返回；
-            ['待辦的'， '加工'， '發表'， '完全的']。forEach（s => {
-                常量 數數 = 數據。篩選（o => o。地位 === s）。長度；
-                常量 點 = 文件。getElementById（`點-${s}`）；
-                如果（點） 點。風格。展示 = 數數 > 0？'堵塞'：'沒有任何'；
-            }）；
+        async function refreshBadges() {
+            const { data } = await _supabase.from('orders').select('status');
+            if(!data) return;
+            ['pending', 'processing', 'delivered', 'completed'].forEach(s => {
+                const count = data.filter(o => o.status === s).length;
+                const dot = document.getElementById(`dot-${s}`);
+                if(dot) dot.style.display = count > 0 ? 'block' : 'none';
+            });
         }
 
         // --- 介面切換 ---
-        窗戶。切換主選項卡 = 功能（t） {
-            文件。getElementById（'section-products'）。類別列表。切換（'隱'， t !== '產品'）；
-            文件。getElementById（'章節命令'）。類別列表。切換（'隱'， t !== “命令”）；
-            文件。getElementById（'main-tab-products'）。類別名 = t === '產品'？'tab-btn 已啟動'：'tab-btn 未啟動'；
-            文件。getElementById（'主標籤順序'）。類別名 = t === “命令”？'tab-btn 已啟動'：'tab-btn 未啟動'；
+        window.switchMainTab = function(t) {
+            document.getElementById('section-products').classList.toggle('hidden', t !== 'products');
+            document.getElementById('section-orders').classList.toggle('hidden', t !== 'orders');
+            document.getElementById('main-tab-products').className = t === 'products' ? 'tab-btn active' : 'tab-btn inactive';
+            document.getElementById('main-tab-orders').className = t === 'orders' ? 'tab-btn active' : 'tab-btn inactive';
         }
 
-        窗戶。切換順序子選項卡 = 功能（標籤頁） {
-            目前訂單標籤 = 標籤頁；
-            ['待辦的'， '加工'， '發表'， '完全的']。forEach（t => {
-                常量 按鈕 = 文件。getElementById（`order-tab-${t}`）；
-                如果（按鈕） 按鈕。類別名 = 標籤頁 === t？'tab-btn active text-xs'：'tab-btn 不活動文字-xs'；
-            }）；
-            fetchOrders（）；
+        window.switchOrderSubTab = function(tab) {
+            currentOrderTab = tab;
+            ['pending', 'processing', 'delivered', 'completed'].forEach(t => {
+                const btn = document.getElementById(`order-tab-${t}`);
+                if(btn) btn.className = tab === t ? 'tab-btn active text-xs' : 'tab-btn inactive text-xs';
+            });
+            fetchOrders();
         }
 
-        // --- 彈跳窗操作 ---
-        窗戶。openAddModal = 功能（） {
-            文件。getElementById（'編輯表單'）。重置（）；
-            文件。getElementById（'edit-id'）。價值 = ''；
-            文件。getElementById（'modal-title'）。內部文字 = '新增作品'；
-            文件。getElementById（'刪除按鈕'）。風格。展示 = '沒有任何'；
-            文件。getElementById（'edit-modal'）。類別列表。添加（'積極的'）；
+        // --- 彈窗操作 ---
+        window.openAddModal = function() {
+            document.getElementById('edit-form').reset();
+            document.getElementById('edit-id').value = '';
+            document.getElementById('modal-title').innerText = '新增作品';
+            document.getElementById('delete-btn').style.display = 'none';
+            document.getElementById('edit-modal').classList.add('active');
         }
 
-        窗戶。開啟編輯模態框 = 功能（p） {
-            文件。getElementById（'edit-id'）。價值 = p。ID；
-            文件。getElementById（'編輯名稱'）。價值 = p。姓名；
-            文件。getElementById（'編輯價格'）。價值 = p。價格；
-            文件。getElementById（'編輯狀態'）。價值 = p。地位。（）；
-            文件。getElementById（'edit-desc'）。價值 = p。描述 || ''；
-            文件。getElementById（'edit-img1'）。價值 = p。圖片網址 || ''；
-            文件。getElementById（'編輯詳情標題'）。價值 = p。詳情標題 || ''；
-            文件。getElementById（'編輯詳情'）。價值 = p。細節 || ''；
-            文件。getElementById（'modal-title'）。內部文字 = '編輯作品'；
-            文件。getElementById（'刪除按鈕'）。風格。展示 = '堵塞'；
-            文件。getElementById（'edit-modal'）。類別列表。添加（'積極的'）；
+        window.openEditModal = function(p) {
+            document.getElementById('edit-id').value = p.id;
+            document.getElementById('edit-name').value = p.name;
+            document.getElementById('edit-price').value = p.price;
+            document.getElementById('edit-status').value = p.status.toString();
+            document.getElementById('edit-desc').value = p.description || '';
+            document.getElementById('edit-img1').value = p.image_url || '';
+            document.getElementById('edit-detail-title').value = p.detail_title || '';
+            document.getElementById('edit-detail').value = p.detail || '';
+            document.getElementById('modal-title').innerText = '編輯作品';
+            document.getElementById('delete-btn').style.display = 'block';
+            document.getElementById('edit-modal').classList.add('active');
         }
 
-        窗戶。關閉模態框 = 功能（） { 文件。getElementById（'edit-modal'）。類別列表。消除（'積極的'）； }
+        window.closeModal = function() { document.getElementById('edit-modal').classList.remove('active'); }
 
-        文件。getElementById（'編輯表單'）。新增事件監聽器（'提交'， 非同步 （e） => {
-            e。preventDefault（）；
-            常量 ID = 文件。getElementById（'edit-id'）。價值；
-            常量 有效載荷 = {
-                姓名：文件。getElementById（'編輯名稱'）。價值，
-                價格：解析整數（文件。getElementById（'編輯價格'）。價值），
-                地位：文件。getElementById（'編輯狀態'）。價值 === '真的'，
-                描述：文件。getElementById（'edit-desc'）。價值，
-                圖片網址：文件。getElementById（'edit-img1'）。價值，
-                詳情標題：文件。getElementById（'編輯詳情標題'）。價值，
-                細節：文件。getElementById（'編輯詳情'）。價值
-            }；
-            常量 {錯誤} = ID？等待 _supabase。從（'產品'）。更新（有效載荷）。方程式（'ID'， ID）：等待 _supabase。從（'產品'）。插入（[有效載荷]）；
-            如果 （！錯誤） { 關閉模態框（）； fetchProducts（）； } 別的 { 警報（錯誤。訊息）； }
-        }）；
+        document.getElementById('edit-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('edit-id').value;
+            const payload = {
+                name: document.getElementById('edit-name').value,
+                price: parseInt(document.getElementById('edit-price').value),
+                status: document.getElementById('edit-status').value === 'true',
+                description: document.getElementById('edit-desc').value,
+                image_url: document.getElementById('edit-img1').value,
+                detail_title: document.getElementById('edit-detail-title').value,
+                detail: document.getElementById('edit-detail').value
+            };
+            const { error } = id ? await _supabase.from('products').update(payload).eq('id', id) : await _supabase.from('products').insert([payload]);
+            if (!error) { closeModal(); fetchProducts(); } else { alert(error.message); }
+        });
 
-        窗戶。刪除產品 = 非同步 功能（） {
-            如果（確認（“確定刪除？此動作無法重複。”）） {
-                等待 _supabase。從（'產品'）。刪除（）。方程式（'ID'， 文件。getElementById（'edit-id'）。價值）；
-                關閉模態框（）； fetchProducts（）；
+        window.deleteProduct = async function() {
+            if(confirm('確定刪除？此動作無法復原。')) {
+                await _supabase.from('products').delete().eq('id', document.getElementById('edit-id').value);
+                closeModal(); fetchProducts();
             }
         }
-    </腳本>
-</身體>
+    </script>
+</body>
+
 </html>
